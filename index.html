@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Petrova Crisis</title>
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5' fill='%232d6cdf'/%3E%3C/svg%3E" />
+  <style>
+    /* Pixel font for the battle UI. Must be the first rule in the sheet:
+       @import is only valid before any other at-rule or style rule. */
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    /* Shared retro theme tokens. Hoisted to :root so the battle overlay, the
+       start menu and the mobile controls all draw from the same palette. */
+    :root {
+      --pixel-font: 'Press Start 2P', 'Courier New', monospace;
+      --px-ink: #202020;        /* hard borders + shadows */
+      --px-cream: #f8f8f0;      /* light text-box fill */
+      --px-panel: #181820;      /* dark panel fill */
+      --px-edge: #e8e8e8;       /* light border on dark panels */
+      --px-blue: #2d6cdf;       /* brand blue, ATTACK / Play */
+      --px-red: #d82800;        /* retro red, COUNTER / warning */
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      color: #eee;
+      font: 14px system-ui, sans-serif;
+    }
+
+    canvas {
+      display: block;
+      touch-action: none;
+    }
+
+    /* Mobile controls: square pixel buttons — hard border, hard shadow, no
+       border-radius and no backdrop blur, matching the battle overlay. */
+    .mobile-btn {
+      position: fixed;
+      display: grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      padding: 0;
+      border: 3px solid var(--px-ink);
+      background: var(--px-panel);
+      color: var(--px-edge);
+      box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .14),
+        inset -2px -2px 0 rgba(0, 0, 0, .45),
+        3px 3px 0 rgba(0, 0, 0, .55);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 100;
+      user-select: none;
+      touch-action: none;
+      image-rendering: pixelated;
+    }
+
+    .mobile-btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .14),
+        inset -2px -2px 0 rgba(0, 0, 0, .45),
+        1px 1px 0 rgba(0, 0, 0, .55);
+    }
+
+    .mobile-btn:focus {
+      outline: none;
+    }
+
+    .mobile-btn,
+    #dpad,
+    .dpad-btn,
+    #fullscreenBtn {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #fullscreenBtn {
+      position: fixed;
+      top: max(10px, env(safe-area-inset-top));
+      right: max(10px, env(safe-area-inset-right));
+      z-index: 2000;
+      width: 46px;
+      height: 46px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, .55);
+      border-radius: 50%;
+      background: rgba(35, 45, 62, .52);
+      backdrop-filter: blur(5px);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+    }
+
+    #fullscreenBtn svg {
+      width: 20px;
+      height: 20px;
+      display: block;
+    }
+
+    #fullscreenBtn:active {
+      transform: scale(.94);
+    }
+
+    #jumpBtn {
+      bottom: max(20px, env(safe-area-inset-bottom));
+      right: max(22px, env(safe-area-inset-right));
+      width: 72px;
+      height: 72px;
+      font-size: 28px;
+    }
+
+    #jumpBtn {
+      transform: rotate(180deg);
+    }
+
+    #jumpBtn:active {
+      transform: rotate(180deg) scale(.94);
+    }
+
+    /* Mobile D-Pad: 3x3 grid, centre cell left empty
+       [ ][▲][ ]
+       [◀][ ][▶]
+       [ ][▼][ ] */
+    #dpad {
+      position: fixed;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      left: max(22px, env(safe-area-inset-left));
+      display: grid;
+      grid-template-columns: repeat(3, 50px);
+      grid-template-rows: repeat(3, 50px);
+      gap: 4px;
+      z-index: 100;
+      touch-action: none;
+    }
+
+    .dpad-btn {
+      display: grid;
+      place-items: center;
+      width: 50px;
+      height: 50px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, .38);
+      border-radius: 12px;
+      background: rgba(25, 32, 44, .42);
+      backdrop-filter: blur(4px);
+      color: #eee;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    .dpad-btn:active {
+      background: rgba(65, 80, 105, .58);
+    }
+
+    .dpad-btn:focus {
+      outline: none;
+    }
+
+    #dpad-up {
+      grid-area: 1 / 2;
+    }
+
+    #dpad-left {
+      grid-area: 2 / 1;
+    }
+
+    #dpad-right {
+      grid-area: 2 / 3;
+    }
+
+    #dpad-down {
+      grid-area: 3 / 2;
+    }
+
+    @media (min-width: 768px) and (pointer: fine) {
+
+      #dpad,
+      #jumpBtn {
+        display: none;
+      }
+    }
+
+    @media (orientation: portrait) and (max-width: 767px) {
+      #overlay {
+        overflow-y: auto;
+      }
+
+      #menu {
+        width: min(340px, calc(100vw - 32px));
+      }
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(10, 10, 14, .72);
+      font-family: var(--pixel-font);
+    }
+
+    /* Start menu: the same cream text box + hard pixel border as the battle
+       bottom bar, so the two screens share one visual language. */
+    #menu {
+      background: var(--px-cream);
+      color: var(--px-ink);
+      padding: 22px 24px;
+      border: 4px solid var(--px-ink);
+      box-shadow: 6px 6px 0 var(--px-ink);
+      width: 340px;
+      box-sizing: border-box;
+      image-rendering: pixelated;
+    }
+
+    #menu h2 {
+      margin: 0 0 10px;
+      font-family: var(--pixel-font);
+      font-size: 16px;
+      font-weight: normal;
+      letter-spacing: 1px;
+      line-height: 1.5;
+      color: var(--px-ink);
+    }
+
+    #tagline {
+      margin: 0 0 16px;
+      color: #6a6a72;
+      font-family: var(--pixel-font);
+      font-size: 8px;
+      line-height: 1.9;
+      letter-spacing: .5px;
+    }
+
+    .field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    .field>span:first-child {
+      width: 90px;
+      color: #6a6a72;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    /* Hover only inside the menu — the flat grey here would otherwise leak
+       onto the pixel buttons in the battle overlay and the D-Pad. */
+    #menu button:hover:not(:disabled) {
+      filter: brightness(1.12);
+    }
+
+    button:disabled {
+      cursor: default;
+    }
+
+    /* Chunky GBA-style Play button, same bevel as #attack-btn. */
+    #play {
+      width: 100%;
+      margin-top: 4px;
+      padding: 14px 18px;
+      font-family: var(--pixel-font);
+      font-size: 12px;
+      font-weight: normal;
+      letter-spacing: 1px;
+      color: #fff;
+      background: var(--px-blue);
+      border: 3px solid var(--px-ink);
+      box-shadow: inset 3px 3px 0 rgba(255, 255, 255, .35),
+        inset -3px -3px 0 rgba(0, 0, 0, .35),
+        3px 3px 0 var(--px-ink);
+      touch-action: manipulation;
+      image-rendering: pixelated;
+    }
+
+    #play:active:not(:disabled) {
+      transform: translate(2px, 2px);
+      box-shadow: inset 3px 3px 0 rgba(255, 255, 255, .35),
+        inset -3px -3px 0 rgba(0, 0, 0, .35),
+        1px 1px 0 var(--px-ink);
+    }
+
+    #play:disabled {
+      filter: grayscale(.85) brightness(.85);
+    }
+
+    #msg {
+      color: #a8780a;
+      min-height: 1.3em;
+      font-family: var(--pixel-font);
+      font-size: 8px;
+      line-height: 1.8;
+    }
+
+    /* Controls legend: a dark inset strip so it reads as a caption, not body
+       copy. Small system text on purpose — Press Start 2P is too wide for it. */
+    .hint {
+      margin: 16px 0 0;
+      padding: 10px 12px;
+      color: #c8c8d0;
+      background: var(--px-panel);
+      border: 3px solid var(--px-ink);
+      font: 11px/1.7 ui-monospace, 'Courier New', monospace;
+      letter-spacing: .02em;
+    }
+
+    /* Battle UI overlay: HP panels, cream menu bar, countdown, warning banner.
+       Retro-pixel restyle: hard-edged GBA-style borders, no border-radius
+       anywhere, Press Start 2P throughout. The overlay sits above the D-Pad /
+       jump (z-index 100) and swallows touches so those controls cannot fire
+       during a fight. */
+    #battle-ui {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      pointer-events: auto;
+      touch-action: none;
+      image-rendering: pixelated;
+      font-family: var(--pixel-font);
+    }
+
+    body.battle-active #dpad,
+    body.battle-active #jumpBtn {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    #battle-transition {
+      position: fixed;
+      inset: 0;
+      z-index: 400;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #battle-transition.active {
+      animation: battleFlash 0.7s ease-in-out;
+    }
+
+    @keyframes battleFlash {
+      0% {
+        opacity: 0;
+      }
+
+      35% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0;
+      }
+    }
+
+    #battle-ui button {
+      pointer-events: auto;
+    }
+
+    /* ---- Pixel HP panels (the dark GBA status boxes) ---- */
+
+    #boss-info,
+    #rocky-info {
+      position: absolute;
+      width: 240px;
+      padding: 10px 12px;
+      box-sizing: border-box;
+      background: #181820;
+      border: 4px solid #e8e8e8;
+      box-shadow: 4px 4px 0 #202020;
+      image-rendering: pixelated;
+    }
+
+    /* Below the exit button, which sits at top:16px and is 36px tall. */
+    #boss-info {
+      top: 58px;
+      left: 16px;
+    }
+
+    /* Above the menu bar (bottom:14px, ~84px tall) so the two never touch. */
+    #rocky-info {
+      bottom: 110px;
+      right: 16px;
+    }
+
+    #boss-name,
+    #rocky-name {
+      font-family: var(--pixel-font);
+      font-size: 11px;
+      font-weight: normal;
+      color: #fff;
+      letter-spacing: 1px;
+      margin: 0 0 8px;
+    }
+
+    .hp-bar-container {
+      display: flex;
+      align-items: center;
+    }
+
+    /* Yellow "HP" caption, as in the Pokemon status boxes. */
+    .hp-label {
+      font-family: var(--pixel-font);
+      font-size: 8px;
+      color: #ffd400;
+      margin-right: 6px;
+    }
+
+    /* Segmented gauge track. The repeating gradient draws a dark divider every
+       8px, which is what gives the retro notched look. */
+    .hp-bar-bg {
+      width: 180px;
+      height: 12px;
+      box-sizing: border-box;
+      background: #404040;
+      border: 3px solid #e8e8e8;
+      box-shadow: 2px 2px 0 #202020;
+      overflow: hidden;
+      background-image: repeating-linear-gradient(90deg,
+          transparent 0 8px,
+          rgba(0, 0, 0, .45) 8px 10px);
+    }
+
+    /* --hp-color is set by updateHP(); the JS only ever writes style.width.
+       steps(8) drains the bar in eight chunks rather than sliding it smoothly. */
+    .hp-bar-fill {
+      height: 100%;
+      width: 100%;
+      --hp-color: #58d854;
+      background-image: repeating-linear-gradient(90deg,
+          var(--hp-color) 0 8px,
+          rgba(0, 0, 0, .25) 8px 10px);
+      transition: width .4s steps(8);
+    }
+
+    /* ---- Exit button ---- */
+
+    #battle-exit-btn {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 210;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #181820;
+      color: #fff;
+      border: 3px solid #e8e8e8;
+      box-shadow: 3px 3px 0 #202020;
+      font-family: var(--pixel-font);
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      pointer-events: auto;
+      touch-action: manipulation;
+      image-rendering: pixelated;
+    }
+
+    /* ---- Bottom menu bar: cream text box + action buttons ---- */
+
+    #battle-menu {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(92vw, 760px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      box-sizing: border-box;
+      background: #f8f8f0;
+      border: 4px solid #202020;
+      box-shadow: 4px 4px 0 #202020;
+      pointer-events: auto;
+      image-rendering: pixelated;
+    }
+
+    #battle-prompt {
+      flex: 1;
+      margin: 0;
+      font-family: var(--pixel-font);
+      font-size: 12px;
+      color: #202020;
+      line-height: 1.6;
+    }
+
+    #battle-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    /* Chunky GBA button: a hard outer shadow for the drop, plus light/dark
+       inset shadows for the fake bevel. */
+    #attack-btn,
+    #counter-btn {
+      min-width: 150px;
+      min-height: 44px;
+      padding: 12px 22px;
+      font-family: var(--pixel-font);
+      font-size: 11px;
+      font-weight: normal;
+      letter-spacing: 1px;
+      text-align: center;
+      color: #fff;
+      cursor: pointer;
+      border: 3px solid #202020;
+      box-shadow: inset 3px 3px 0 rgba(255, 255, 255, .35),
+        inset -3px -3px 0 rgba(0, 0, 0, .35),
+        3px 3px 0 #202020;
+      touch-action: manipulation;
+      image-rendering: pixelated;
+    }
+
+    /* Pressed: the button drops onto its own shadow. */
+    #attack-btn:active,
+    #counter-btn:active,
+    #battle-exit-btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: inset 3px 3px 0 rgba(255, 255, 255, .35),
+        inset -3px -3px 0 rgba(0, 0, 0, .35),
+        1px 1px 0 #202020;
+    }
+
+    #attack-btn:disabled,
+    #counter-btn:disabled {
+      filter: grayscale(1);
+      pointer-events: none;
+    }
+
+    #attack-btn {
+      background: #2d6cdf;
+    }
+
+    #counter-btn {
+      background: #d82800;
+      animation: btnPulse .6s ease-in-out infinite;
+    }
+
+    @keyframes btnPulse {
+
+      0%,
+      100% {
+        transform: scale(1)
+      }
+
+      50% {
+        transform: scale(1.08)
+      }
+    }
+
+    /* ---- Countdown ---- */
+
+    #battle-timer {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: var(--pixel-font);
+      font-size: 38px;
+      color: #f83800;
+      text-shadow: 3px 3px 0 #202020;
+      pointer-events: none;
+    }
+
+    /* ---- Boss-attack warning banner ---- */
+
+    #battle-warning {
+      position: absolute;
+      top: 35%;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 320px;
+      padding: 14px 18px;
+      box-sizing: border-box;
+      background: #d82800;
+      border: 4px solid #202020;
+      box-shadow: 4px 4px 0 #202020;
+      color: #fff;
+      font-family: var(--pixel-font);
+      font-size: 11px;
+      line-height: 1.7;
+      text-align: center;
+      pointer-events: none;
+      image-rendering: pixelated;
+      animation: warningPulse .8s ease-in-out infinite;
+    }
+
+    @keyframes warningPulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .6
+      }
+    }
+
+    /* The victory/defeat banner is built by JS with inline styles, so it needs
+       its own selector to pick up the pixel font. */
+    #battle-outcome {
+      font-family: var(--pixel-font);
+    }
+
+    @media (max-width: 767px) {
+
+      #battle-menu {
+        width: 94vw;
+        padding: 10px 12px;
+        gap: 8px;
+      }
+
+      #battle-prompt {
+        font-size: 9px;
+      }
+
+      #attack-btn,
+      #counter-btn {
+        font-size: 9px;
+        padding: 10px 14px;
+        min-width: 120px;
+        min-height: 44px;
+        touch-action: manipulation;
+      }
+
+      #boss-info,
+      #rocky-info {
+        width: 180px;
+        padding: 10px;
+      }
+
+      #boss-name,
+      #rocky-name {
+        font-size: 9px;
+      }
+
+      .hp-bar-bg {
+        width: 130px;
+      }
+
+      #rocky-info {
+        bottom: 96px;
+      }
+
+      #battle-timer {
+        font-size: 28px;
+      }
+
+      #battle-warning {
+        font-size: 9px;
+        max-width: 260px;
+      }
+
+      #battle-exit-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="overlay">
+    <div id="menu">
+      <h2>Petrova Crisis</h2>
+      <p id="tagline">solve code to defeat the boss</p>
+      <div id="msg"></div>
+      <button id="play" disabled>Play</button>
+      <p class="hint">WASD / arrows move · Space jump · Shift run · E use<br />R respawn · Esc pause (this menu)
+      </p>
+    </div>
+  </div>
+
+  <div id="battle-transition"></div>
+
+  <!-- Battle UI overlay (HP panels, bottom menu bar, timer, warning). -->
+  <div id="battle-ui" style="display: none;">
+    <!-- Top-left: exit button (unwired — see note in README) -->
+    <button id="battle-exit-btn" type="button" aria-label="Exit battle">X</button>
+
+    <!-- Top-left, below the exit button: boss info -->
+    <div id="boss-info">
+      <div id="boss-name">MONSTER IDK</div>
+      <div class="hp-bar-container">
+        <div class="hp-label">HP</div>
+        <div class="hp-bar-bg">
+          <div id="boss-hp-fill" class="hp-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom-right, above the menu bar: Rocky info -->
+    <div id="rocky-info">
+      <div id="rocky-name">ROCKY</div>
+      <div class="hp-bar-container">
+        <div class="hp-label">HP</div>
+        <div class="hp-bar-bg">
+          <div id="rocky-hp-fill" class="hp-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom bar: prompt text on the left, actions on the right, mirroring
+         the Pokemon text-box + FIGHT-menu layout. -->
+    <div id="battle-menu">
+      <div id="battle-prompt">What will ROCKY do?</div>
+      <div id="battle-actions">
+        <button id="attack-btn">ATTACK</button>
+        <button id="counter-btn" style="display: none;">COUNTER!</button>
+      </div>
+    </div>
+
+    <!-- Countdown timer -->
+    <div id="battle-timer" style="display: none;">45</div>
+
+    <!-- Boss-attack warning popup -->
+    <div id="battle-warning" style="display: none;">
+      The monster is about to attack! Counter quickly!
+    </div>
+  </div>
+
+  <!-- Mobile controls -->
+  <div id="dpad">
+    <button id="dpad-up" class="dpad-btn" aria-label="Move up">▲</button>
+    <button id="dpad-left" class="dpad-btn" aria-label="Move left">◀</button>
+    <button id="dpad-right" class="dpad-btn" aria-label="Move right">▶</button>
+    <button id="dpad-down" class="dpad-btn" aria-label="Move down">▼</button>
+  </div>
+  <button id="fullscreenBtn" aria-label="Enter fullscreen" title="Enter fullscreen">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+  <button id="jumpBtn" class="mobile-btn" aria-label="Jump"><span aria-hidden="true">⤓</span></button>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+
+</html>

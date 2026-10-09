@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Petrova Crisis</title>
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5' fill='%232d6cdf'/%3E%3C/svg%3E" />
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      color: #eee;
+      font: 14px system-ui, sans-serif;
+    }
+
+    canvas {
+      display: block;
+      touch-action: none;
+    }
+
+    /* Mobile controls */
+    .mobile-btn {
+      position: fixed;
+      display: grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, .38);
+      border-radius: 50%;
+      background: rgba(25, 32, 44, .42);
+      backdrop-filter: blur(4px);
+      color: #eee;
+      font-size: 22px;
+      cursor: pointer;
+      z-index: 100;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .mobile-btn:hover,
+    .mobile-btn:active {
+      background: rgba(65, 80, 105, .58);
+    }
+
+    .mobile-btn:focus {
+      outline: none;
+    }
+
+    .mobile-btn,
+    #dpad,
+    .dpad-btn,
+    #fullscreenBtn {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #fullscreenBtn {
+      position: fixed;
+      top: max(10px, env(safe-area-inset-top));
+      right: max(10px, env(safe-area-inset-right));
+      z-index: 2000;
+      width: 46px;
+      height: 46px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, .55);
+      border-radius: 50%;
+      background: rgba(35, 45, 62, .52);
+      backdrop-filter: blur(5px);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+    }
+
+    #fullscreenBtn svg {
+      width: 20px;
+      height: 20px;
+      display: block;
+    }
+
+    #fullscreenBtn:active {
+      transform: scale(.94);
+    }
+
+    #jumpBtn {
+      bottom: max(20px, env(safe-area-inset-bottom));
+      right: max(22px, env(safe-area-inset-right));
+      width: 72px;
+      height: 72px;
+      font-size: 28px;
+    }
+
+    #jumpBtn {
+      transform: rotate(180deg);
+    }
+
+    #jumpBtn:active {
+      transform: rotate(180deg) scale(.94);
+    }
+
+    /* Mobile D-Pad: 3x3 grid, centre cell left empty
+       [ ][▲][ ]
+       [◀][ ][▶]
+       [ ][▼][ ] */
+    #dpad {
+      position: fixed;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      left: max(22px, env(safe-area-inset-left));
+      display: grid;
+      grid-template-columns: repeat(3, 50px);
+      grid-template-rows: repeat(3, 50px);
+      gap: 4px;
+      z-index: 100;
+      touch-action: none;
+    }
+
+    .dpad-btn {
+      display: grid;
+      place-items: center;
+      width: 50px;
+      height: 50px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, .38);
+      border-radius: 12px;
+      background: rgba(25, 32, 44, .42);
+      backdrop-filter: blur(4px);
+      color: #eee;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    .dpad-btn:active {
+      background: rgba(65, 80, 105, .58);
+    }
+
+    .dpad-btn:focus {
+      outline: none;
+    }
+
+    #dpad-up {
+      grid-area: 1 / 2;
+    }
+
+    #dpad-left {
+      grid-area: 2 / 1;
+    }
+
+    #dpad-right {
+      grid-area: 2 / 3;
+    }
+
+    #dpad-down {
+      grid-area: 3 / 2;
+    }
+
+    @media (min-width: 768px) and (pointer: fine) {
+
+      #dpad,
+      #jumpBtn {
+        display: none;
+      }
+    }
+
+    @media (orientation: portrait) and (max-width: 767px) {
+      #overlay {
+        overflow-y: auto;
+      }
+
+      #menu {
+        width: min(340px, calc(100vw - 32px));
+      }
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(0, 0, 0, .65);
+    }
+
+    #menu {
+      background: #26292e;
+      padding: 18px 22px;
+      border-radius: 8px;
+      width: 340px;
+    }
+
+    #menu h2 {
+      margin: 0 0 4px;
+    }
+
+    #tagline {
+      margin: 0 0 10px;
+      color: #8fb4e8;
+      font-size: 12.5px;
+      letter-spacing: .02em;
+    }
+
+    .field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    .field>span:first-child {
+      width: 90px;
+      color: #9aa0a8;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      background: #444a52;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: default;
+    }
+
+    #play {
+      width: 100%;
+      margin-top: 10px;
+      padding: 9px;
+      font-size: 15px;
+      background: #2d6cdf;
+      border-color: #2d6cdf;
+    }
+
+    #msg {
+      color: #ffd400;
+      min-height: 1.3em;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .hint {
+      color: #8a8f98;
+      font-size: 12px;
+      line-height: 1.5;
+      margin: 10px 0 0;
+    }
+
+    /* Battle UI overlay: HP bars, action buttons, countdown, warning banner.
+       The overlay sits above the D-Pad / jump (z-index 100) and swallows
+       touches so those controls cannot fire during a fight. */
+    #battle-ui {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    body.battle-active #dpad,
+    body.battle-active #jumpBtn {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    #battle-transition {
+      position: fixed;
+      inset: 0;
+      z-index: 400;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #battle-transition.active {
+      animation: battleFlash 0.7s ease-in-out;
+    }
+
+    @keyframes battleFlash {
+      0% { opacity: 0; }
+      35% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    #battle-ui button {
+      pointer-events: auto;
+    }
+
+    #boss-info,
+    #rocky-info {
+      position: absolute;
+      width: 250px;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, .7);
+      border: 2px solid rgba(255, 255, 255, .35);
+      border-radius: 10px;
+      box-sizing: border-box;
+    }
+
+    #boss-info {
+      top: 20px;
+      left: 20px;
+    }
+
+    #rocky-info {
+      bottom: 90px;
+      right: 20px;
+    }
+
+    #boss-name,
+    #rocky-name {
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: .08em;
+      margin-bottom: 6px;
+    }
+
+    .hp-bar-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hp-label {
+      font-size: 12px;
+      font-weight: bold;
+      color: #9aa0a8;
+    }
+
+    .hp-bar-bg {
+      width: 180px;
+      height: 12px;
+      background: #333;
+      border: 2px solid #555;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .hp-bar-fill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #4caf50, #8bc34a);
+      transition: width 0.5s ease;
+    }
+
+    #battle-actions {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    #attack-btn,
+    #counter-btn {
+      padding: 14px 40px;
+      min-height: 44px;
+      min-width: 44px;
+      font-size: 18px;
+      font-weight: bold;
+      border: 3px solid #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #fff;
+      touch-action: manipulation;
+    }
+
+    #attack-btn {
+      background: #2d6cdf;
+    }
+
+    #counter-btn {
+      background: #e74c3c;
+      animation: btnPulse .6s ease-in-out infinite;
+    }
+
+    @keyframes btnPulse {
+
+      0%,
+      100% {
+        transform: scale(1)
+      }
+
+      50% {
+        transform: scale(1.08)
+      }
+    }
+
+    #battle-timer {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 64px;
+      font-weight: bold;
+      color: #ff4444;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, .8);
+      pointer-events: none;
+    }
+
+    #battle-warning {
+      position: absolute;
+      top: 35%;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 22px;
+      background: rgba(231, 76, 60, .9);
+      color: #fff;
+      font-weight: bold;
+      border-radius: 8px;
+      text-align: center;
+      pointer-events: none;
+      animation: warningPulse .8s ease-in-out infinite;
+    }
+
+    @keyframes warningPulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .6
+      }
+    }
+
+    @media (max-width: 767px) {
+
+      #boss-info,
+      #rocky-info {
+        width: 180px;
+        padding: 10px;
+      }
+
+      #rocky-info {
+        bottom: 110px;
+      }
+
+      .hp-bar-bg {
+        width: 120px;
+      }
+
+      #battle-timer {
+        font-size: 42px;
+      }
+
+      #attack-btn,
+      #counter-btn {
+        padding: 16px 36px;
+        min-height: 44px;
+        min-width: 44px;
+        touch-action: manipulation;
+      }
+    }
+  </style>
+  <script type="module" crossorigin src="./assets/index-BehmwnDd.js"></script>
+</head>
+
+<body>
+  <div id="overlay">
+    <div id="menu">
+      <h2>Petrova Crisis</h2>
+      <p id="tagline">solve code to defeat the boss</p>
+      <div id="msg"></div>
+      <button id="play" disabled>Play</button>
+      <p class="hint">WASD / arrows move · Space jump · Shift run · E use<br />R respawn · Esc pause (this menu)
+      </p>
+    </div>
+  </div>
+
+  <div id="battle-transition"></div>
+
+  <!-- Battle UI overlay (HP bars, action buttons, timer, warning). -->
+  <div id="battle-ui" style="display: none;">
+    <!-- Top-left: boss info -->
+    <div id="boss-info">
+      <div id="boss-name">BOSS</div>
+      <div class="hp-bar-container">
+        <div class="hp-label">HP</div>
+        <div class="hp-bar-bg">
+          <div id="boss-hp-fill" class="hp-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom-right: Rocky info -->
+    <div id="rocky-info">
+      <div id="rocky-name">ROCKY</div>
+      <div class="hp-bar-container">
+        <div class="hp-label">HP</div>
+        <div class="hp-bar-bg">
+          <div id="rocky-hp-fill" class="hp-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom-center: action button -->
+    <div id="battle-actions">
+      <button id="attack-btn">ATTACK</button>
+      <button id="counter-btn" style="display: none;">COUNTER!</button>
+    </div>
+
+    <!-- Countdown timer -->
+    <div id="battle-timer" style="display: none;">45</div>
+
+    <!-- Boss-attack warning popup -->
+    <div id="battle-warning" style="display: none;">
+      The monster is about to attack! Counter quickly!
+    </div>
+  </div>
+
+  <!-- Mobile controls -->
+  <div id="dpad">
+    <button id="dpad-up" class="dpad-btn" aria-label="Move up">▲</button>
+    <button id="dpad-left" class="dpad-btn" aria-label="Move left">◀</button>
+    <button id="dpad-right" class="dpad-btn" aria-label="Move right">▶</button>
+    <button id="dpad-down" class="dpad-btn" aria-label="Move down">▼</button>
+  </div>
+  <button id="fullscreenBtn" aria-label="Enter fullscreen" title="Enter fullscreen">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  </button>
+  <button id="jumpBtn" class="mobile-btn" aria-label="Jump"><span aria-hidden="true">⤓</span></button>
+</body>
+
+</html>
