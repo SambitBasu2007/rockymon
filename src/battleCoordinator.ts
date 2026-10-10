@@ -20,13 +20,23 @@ import { AudioManager, SoundEffect } from './audio';
  *
  * Wiring:
  *   press ATTACK  ──▶ gate ──▶ Rocky's animation ──▶ 25 damage ──▶ BOSS_TURN
- *   press COUNTER!──▶ gate ──▶ proceed: Rocky again 25 ──▶ PLAYER_TURN
+ *   press COUNTER!──▶ gate ──▶ proceed: guard counter (see below) ──▶ PLAYER_TURN
  *                        └──▶ cancel / timeout: Boss hits for 45 ──▶ PLAYER_TURN
+ *
+ * A *successful* counter is a distinct three-beat sequence, not a plain attack:
+ *   1. the boss's swing and the blue guard shield start on the same frame —
+ *      the swing is animation only, the blow never lands
+ *   2. Rocky charges for two seconds
+ *   3. Rocky's normal strike finishes it off
+ * The phases are unchanged — the whole sequence runs inside COUNTER_ANIMATING.
  */
 
 const PLAYER_ATTACK_DAMAGE = 25;
 const COUNTER_DAMAGE = 25;
 const BOSS_ATTACK_DAMAGE = 45;
+
+/** Seconds Rocky spends charging between the shield flash and his strike. */
+const COUNTER_CHARGE_SECONDS = 2;
 
 const COUNTER_TIMER_SECONDS = 45;
 const WARNING_DELAY_MS = 2000;
@@ -219,11 +229,13 @@ export class BattleCoordinator {
 
       if (verdict === 'proceed') {
         this.stateMachine.advanceTo(BattlePhase.COUNTER_ANIMATING);
-        await this.playAttack(this.rockySpriteObj, this.bossSpriteObj, () =>
-          this.stateMachine.dealDamageToBoss(COUNTER_DAMAGE),
-        );
+        // The counter button is done for this exchange either way.
+        this.ui.hideActions();
 
-        if (this.stateMachine.getPhase() !== BattlePhase.VICTORY) {
+        await this.runGuardCounter();
+
+        const phase = this.stateMachine.getPhase();
+        if (phase !== BattlePhase.VICTORY && phase !== BattlePhase.DEFEAT) {
           this.stateMachine.advanceTo(BattlePhase.PLAYER_TURN);
         }
       } else {
@@ -234,6 +246,48 @@ export class BattleCoordinator {
     } finally {
       if (!handoff) this.busy = false;
     }
+  }
+
+  /**
+   * The counter a successful COUNTER! press plays:
+   *   1. the boss's swing and the guard shield fire together — the swing is
+   *      a show of force only, Rocky takes no damage from it
+   *   2. Rocky charges for two seconds
+   *   3. Rocky's normal strike finishes the exchange
+   *
+   * Every beat bails out if the fight ends first — `endBattle()` cancels
+   * whatever is in flight, which resolves the pending promise rather than
+   * leaving an `await` hanging.
+   */
+  private async runGuardCounter(): Promise<void> {
+    // 1. Start the swing first: launching an attack calls `cancelAll()`, which
+    //    would wipe out a shield spawned before it. The shield then goes up on
+    //    the very same frame, so the two read as one move — blow and block.
+    const swing = this.playAttack(
+      this.bossSpriteObj,
+      this.rockySpriteObj,
+      // Blocked clean: the swing is pure animation, no HP is exchanged.
+      () => {},
+    );
+    const guard = this.animManager.playShieldAnimation(this.rockySpriteObj, this.bossSpriteObj);
+    await Promise.all([swing, guard.promise]);
+    if (!this.canCounterContinue()) return;
+
+    // 2. Rocky charges.
+    await this.animManager.playPowerUp(this.rockySpriteObj, COUNTER_CHARGE_SECONDS).promise;
+    if (!this.canCounterContinue()) return;
+
+    // 3. The strike — byte-for-byte the ATTACK button's animation.
+    await this.playAttack(this.rockySpriteObj, this.bossSpriteObj, () =>
+      this.stateMachine.dealDamageToBoss(COUNTER_DAMAGE),
+    );
+  }
+
+  /** True while the battle is still live and nobody has won it yet. */
+  private canCounterContinue(): boolean {
+    if (!this.isActive) return false;
+    const phase = this.stateMachine.getPhase();
+    return phase !== BattlePhase.VICTORY && phase !== BattlePhase.DEFEAT;
   }
 
   private runBossAttack(): void {

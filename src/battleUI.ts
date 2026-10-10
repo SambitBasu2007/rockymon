@@ -150,6 +150,12 @@ export class BattleUIController {
     this.hideWarning();
   }
 
+  /** Puts both action buttons away while a counter sequence plays out. */
+  hideActions(): void {
+    this.attackBtn.style.display = 'none';
+    this.counterBtn.style.display = 'none';
+  }
+
   // -------------------------------------------------------------------------
   // Warning banner
   // -------------------------------------------------------------------------
